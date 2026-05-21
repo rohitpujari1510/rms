@@ -862,7 +862,7 @@ var PASSWORDS = { admin: 'admin123', operator: 'op123' };
 
 function loadPasswords() {
   try {
-    var p = JSON.parse(localStorage.getItem('rms6_pass') || 'null');
+    var p = JSON.parse(localStorage.getItem('rms_admin_pass') || 'null');
     if (p && p.admin) PASSWORDS.admin = p.admin;
     if (p && p.operator) PASSWORDS.operator = p.operator;
   } catch(e) {}
@@ -875,7 +875,7 @@ function savePasswords() {
   if (a.length < 4 || o.length < 4) { showToast('Password kam se kam 4 characters ka ho', true); return; }
   PASSWORDS.admin    = a;
   PASSWORDS.operator = o;
-  try { localStorage.setItem('rms6_pass', JSON.stringify(PASSWORDS)); } catch(e) {}
+  try { localStorage.setItem('rms_admin_pass', JSON.stringify(PASSWORDS)); } catch(e) {}
   closeModal('m-chpass');
   showToast('✓ Passwords save ho gaye!');
 }
@@ -998,7 +998,7 @@ function showSyncStatus(msg, color) {
 }
 
 function dbSaveLocal() {
-  try { localStorage.setItem('rms6', JSON.stringify(DB)); } catch(e) {}
+  try { localStorage.setItem('rms_admin', JSON.stringify(DB)); } catch(e) {}
 }
 
 function dbSave() {
@@ -1099,7 +1099,7 @@ function applyDBData(d) {
 function dbLoad() {
   // Sirf idCtr restore karo local se — actual data cloud se aayega
   try {
-    var d = JSON.parse(localStorage.getItem('rms6') || 'null');
+    var d = JSON.parse(localStorage.getItem('rms_admin') || 'null');
     if (d) {
       // Pehle local data load karo (offline fallback ke liye)
       DB.reels   = d.reels   || [];
