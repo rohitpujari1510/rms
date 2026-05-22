@@ -1557,8 +1557,14 @@ function renderInv() {
     if (_stat && getReelStatus(r.rno) !== _stat) return;
     _shown++;
     var cut=getCutTotal(r.rno), waste=getWasteTotal(r.rno);
-    var bal = getPhysicalBal(r.rno);  // Balance = Weight - Cut - Wastage (no pending deduction for display)
     var orig = parseFloat(r.wt);
+    // Order Recd = pending/partial orders remaining qty
+    var ordRecd = DB.cuts.filter(function(c){
+      return c.rno===r.rno && c.status!=='Done' && c.status!=='Closed';
+    }).reduce(function(s,c){ return s+(parseFloat(c.ordqty)||0)-(parseFloat(c.cutqty)||0); }, 0);
+    ordRecd = Math.max(0, ordRecd);
+    // Balance = Weight - Cut - Wastage - Order Recd
+    var bal = Math.max(0, orig - cut - waste - ordRecd);
     var _rs = getReelStatus(r.rno);
     var st = _rs==='fully_consumed'
       ? '<span class="badge b-green" style="font-size:11px;">✅ Fully Consumed</span>'
@@ -1568,11 +1574,6 @@ function renderInv() {
       ? '<span class="badge b-blue">Active</span>'
       : '<span class="badge b-gray">Fresh</span>';
     var _rowBg = _rs==='fully_consumed' ? 'background:#f0fff4;' : '';
-    // Order Recd = sum of pending/partial orders qty (not yet cut)
-    var ordRecd = DB.cuts.filter(function(c){
-      return c.rno===r.rno && c.status!=='Done' && c.status!=='Closed';
-    }).reduce(function(s,c){ return s+(parseFloat(c.ordqty)||0)-(parseFloat(c.cutqty)||0); }, 0);
-    ordRecd = Math.max(0, ordRecd);
     tb.innerHTML +=
       '<tr style="'+_rowBg+'"><td class="mn">'+(i+1)+'</td>'+
       '<td style="font-weight:bold;color:#1a4f8a;white-space:nowrap;">'+H(r.rno)+'</td>'+
