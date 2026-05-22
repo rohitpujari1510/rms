@@ -1568,6 +1568,11 @@ function renderInv() {
       ? '<span class="badge b-blue">Active</span>'
       : '<span class="badge b-gray">Fresh</span>';
     var _rowBg = _rs==='fully_consumed' ? 'background:#f0fff4;' : '';
+    // Order Recd = sum of pending/partial orders qty (not yet cut)
+    var ordRecd = DB.cuts.filter(function(c){
+      return c.rno===r.rno && c.status!=='Done' && c.status!=='Closed';
+    }).reduce(function(s,c){ return s+(parseFloat(c.ordqty)||0)-(parseFloat(c.cutqty)||0); }, 0);
+    ordRecd = Math.max(0, ordRecd);
     tb.innerHTML +=
       '<tr style="'+_rowBg+'"><td class="mn">'+(i+1)+'</td>'+
       '<td style="font-weight:bold;color:#1a4f8a;white-space:nowrap;">'+H(r.rno)+'</td>'+
@@ -1584,6 +1589,7 @@ function renderInv() {
       '<td>'+dateBadge(r.dcut,'db-green','✂')+'</td>'+
       '<td class="col-sep" style="color:#1a6b3c;font-weight:bold;font-family:monospace;">'+N(cut)+' kg</td>'+
       '<td style="color:#b91c1c;font-weight:bold;font-family:monospace;">'+N(waste)+' kg</td>'+
+      '<td style="font-family:monospace;font-weight:bold;color:#92400e;">'+(ordRecd>0?N(ordRecd)+' kg':'<span style="color:#ccc;">—</span>')+'</td>'+
       '<td>'+balanceCell(bal,orig)+'</td>'+
       '<td>'+st+'</td>'+
       '<td class="no-print"><div class="action-btns">'+
@@ -2196,9 +2202,11 @@ function renderCut() {
     var btns = '';
     if (c.status!=='Done' && c.status!=='Closed') btns += '<button class="btn btn-green btn-sm" style="white-space:nowrap;" onclick="openDone('+c.id+',false)">✂ Cut</button>';
     if (c.status!=='Closed') btns += '<button class="btn btn-edit btn-sm" style="white-space:nowrap;" onclick="openDone('+c.id+',true)">✏ Edit Cut</button>';
-    btns += '<button class="btn btn-edit btn-sm" style="white-space:nowrap;" onclick="openEditCut('+c.id+')">✏ Order</button>';
+    if (!c._groupId) btns += '<button class="btn btn-edit btn-sm" style="white-space:nowrap;" onclick="openEditCut('+c.id+')">✏ Order</button>';
     btns += '<button class="btn btn-sm" style="white-space:nowrap;background:#f0f4ff;color:#1a4f8a;border:1px solid #b6ccee;" onclick="printCutOrder('+c.id+')">🖨 PDF</button>';
     if (c._groupId) btns += '<button class="btn btn-sm" style="white-space:nowrap;background:#ede9fe;color:#7c3aed;border:1px solid #c4b5fd;" onclick="printGroupOrder('+c._groupId+')">🖨 Group PDF</button>';
+    if (c._groupId && isAdmin()) btns += '<button class="btn btn-edit btn-sm" style="white-space:nowrap;" onclick="openEditMultiReel('+c._groupId+')">✏ Edit Group</button>';
+    if (!c._groupId && isAdmin()) btns += '';
     if (c.status==='Pending' || c.status==='Partial') btns += '<button class="btn btn-close btn-sm" style="white-space:nowrap;background:#fef3c7;color:#92400e;border:1px solid #fcd34d;" onclick="closeOrder('+c.id+')">🔒 Close</button>';
     if (c.status==='Closed') btns += '<button class="btn btn-reopen btn-sm" style="white-space:nowrap;background:#e6f4ec;color:#1a6b3c;border:1px solid #6ee7b7;font-weight:bold;" onclick="reopenOrder('+c.id+')">🔓 Reopen</button>';
     btns += '<button class="btn btn-del btn-sm" onclick="delCut('+c.id+')">🗑</button>';
@@ -3140,6 +3148,8 @@ function saveMultiReelPO() {
   var party = G('mr-party').trim();
   var dpo   = G('mr-dpo');
   var dcut  = G('mr-dcut');
+  var editGroupId = document.getElementById('m-multireel') ? parseInt(document.getElementById('m-multireel').dataset.editGroup||0) : 0;
+  var editGroupNo = document.getElementById('m-multireel') ? parseInt(document.getElementById('m-multireel').dataset.groupNo||0) : 0;
 
   if (!party) { showToast('Party naam bharo', true); return; }
   if (!dpo)   { showToast('PO Date bharo', true); return; }
@@ -3165,9 +3175,19 @@ function saveMultiReelPO() {
 
   if (!valid.length) { showToast('Reel select karo, Cut Width aur Qty bharo', true); return; }
 
-  // Ek common group ID banao — sab reels ka same order number
-  var groupId = nid();
-  var groupNo = DB.cuts.length + 1; // Next sequential order number
+  // Edit mode: purane orders delete karo
+  if (editGroupId) {
+    DB.cuts = DB.cuts.filter(function(c){ return c._groupId !== editGroupId; });
+    DB.pending = DB.pending.filter(function(p){ return !p._groupId || p._groupId !== editGroupId; });
+  }
+  // Group ID
+  var groupId = editGroupId || nid();
+  var groupNo = editGroupNo || (DB.cuts.length + 1);
+  // Reset edit context
+  if (document.getElementById('m-multireel')) {
+    document.getElementById('m-multireel').dataset.editGroup = '';
+    document.getElementById('m-multireel').dataset.groupNo = '';
+  }
 
   valid.forEach(function(row, i) {
     var r = DB.reels.find(function(x){ return x.rno===row.rno; });
@@ -3240,7 +3260,7 @@ function printGroupOrder(groupId) {
   // Party + Order Info
   +'<div class="info-grid">'
   +'<div class="info-box"><label>Party Naam</label><span>'+H(party)+'</span></div>'
-  +'<div class="info-box"><label>Cut Width</label><span style="color:#1a4f8a;font-family:monospace;">'+cw+' cm</span></div>'
+
   +'<div class="info-box"><label>PO Issue Date</label><span>'+dpo+'</span></div>'
   +'<div class="info-box"><label>Total Reels</label><span style="color:#7c3aed;">'+orders.length+' Reels | '+totalReels+' Rolls</span></div>'
   +'</div>'
@@ -3255,8 +3275,8 @@ function printGroupOrder(groupId) {
 
   // Reel-wise table
   +'<table><thead><tr>'
-  +'<th>#</th><th>Reel No.</th><th>Material</th><th>Width</th><th>No. of Rolls</th>'
-  +'<th>Ordered (kg)</th><th>Cut (kg)</th><th>Wastage (kg)</th><th>Pending (kg)</th><th>Status</th><th>✓</th>'
+  +'<th>#</th><th>Reel No.</th><th>Material</th><th>Original Width</th><th>Cut Width</th><th>No. of Rolls</th>'
+  +'<th>Balance (kg)</th><th>Ordered (kg)</th><th>Cut (kg)</th><th>Wastage (kg)</th><th>Pending (kg)</th><th>Status</th><th>Pending?</th><th>✓</th>'
   +'</tr></thead><tbody>';
 
   orders.forEach(function(c, i) {
@@ -3271,17 +3291,22 @@ function printGroupOrder(groupId) {
       ? '<span class="badge bpart">⏳ Partial</span>'
       : '<span class="badge bpend">📋 Pending</span>';
 
+    var rBal = r ? N(getPhysicalBal(r.rno)) : '—';
+    var origW = r ? r.w+' cm' : '—';
     html += '<tr>'
       +'<td>'+(i+1)+'</td>'
       +'<td style="font-weight:bold;color:#1a4f8a;">'+H(c.rno)+'</td>'
       +'<td>'+(r?H(r.mat):'—')+'</td>'
-      +'<td style="font-family:monospace;">'+c.cw+' cm</td>'
+      +'<td style="font-family:monospace;color:#1a4f8a;font-weight:bold;">'+origW+'</td>'
+      +'<td style="font-family:monospace;color:#1a6b3c;font-weight:bold;">'+c.cw+' cm</td>'
       +'<td style="text-align:center;font-weight:bold;font-family:monospace;">'+(c.slits||1)+'</td>'
+      +'<td style="font-family:monospace;color:#1a6b3c;">'+rBal+' kg</td>'
       +'<td style="font-family:monospace;">'+N(ord)+' kg</td>'
       +'<td style="font-family:monospace;color:#1a6b3c;font-weight:bold;">'+N(cut)+' kg</td>'
       +'<td style="font-family:monospace;color:#b91c1c;">'+N(waste)+' kg</td>'
       +'<td style="font-family:monospace;color:'+(pend>0.05?'#92400e':'#1a6b3c')+';font-weight:bold;">'+(pend>0.05?N(pend)+' kg':'✓ 0')+'</td>'
       +'<td>'+badge+'</td>'
+      +'<td style="text-align:center;font-size:16px;">☐</td>'
       +'<td style="text-align:center;font-size:18px;">□</td>'
       +'</tr>';
   });
@@ -3307,6 +3332,32 @@ function printGroupOrder(groupId) {
   win.document.write(html);
   win.document.close();
   setTimeout(function(){ win.print(); }, 500);
+}
+
+function openEditMultiReel(groupId) {
+  var orders = DB.cuts.filter(function(c){ return c._groupId === groupId; });
+  if (!orders.length) return;
+  var first = orders[0];
+  // Pre-fill mrRows with existing orders
+  mrRows = orders.map(function(c){
+    return {id:c.id, rno:c.rno, qty:c.ordqty, reels:c.slits||1, cw:c.cw, doSplit:false};
+  });
+  // Fill party
+  var partyEl = document.getElementById('mr-party');
+  if (partyEl) {
+    partyEl.innerHTML = '<option value="">-- Party Select --</option>';
+    DB.parties.forEach(function(p){
+      partyEl.innerHTML += '<option value="'+H(p)+'"'+(p===first.party?' selected':'')+'>'+H(p)+'</option>';
+    });
+    partyEl.value = first.party;
+  }
+  S('mr-dpo', first.dpo||toDay());
+  S('mr-dcut', first.dcut||'');
+  renderMRRows();
+  // Store edit context
+  document.getElementById('m-multireel').dataset.editGroup = groupId;
+  document.getElementById('m-multireel').dataset.groupNo = first._groupNo;
+  openModal('m-multireel');
 }
 
 function renderCoreWaste() {
