@@ -1024,6 +1024,18 @@ function showSyncStatus(msg, color) {
   if (el) { el.textContent = msg; el.style.color = color||'#1a6b3c'; }
 }
 
+// Retry connection automatically
+var _retryTimer = null;
+function scheduleRetry() {
+  if (_retryTimer) return;
+  _retryTimer = setTimeout(function(){
+    _retryTimer = null;
+    cloudLoad(function(d){
+      if(d){ applyDBData(d); dbSaveLocal(); renderAll(); }
+    });
+  }, 15000); // 15 second baad retry
+}
+
 function dbSaveLocal() {
   try { localStorage.setItem('rms_admin', JSON.stringify(DB)); } catch(e) {}
 }
@@ -1083,7 +1095,8 @@ function cloudLoad(callback) {
   showSyncStatus('🔄 Connecting...', '#1a4f8a');
   xhrGet(GAS_URL + '?t=' + Date.now(), function(err, d) {
     if (err) {
-      showSyncStatus('⚠ Offline — local data', '#b91c1c');
+      showSyncStatus('⚠ Offline — local data (retry ho raha hai...)', '#92400e');
+      scheduleRetry();
       callback(null);
     } else if (d && d.reels && d.reels.length > 0) {
       // Cloud me data hai — load karo
@@ -1151,7 +1164,7 @@ function startAutoSync() {
   setInterval(function(){
     if (_saveTimer || document.hidden) return;
     xhrGet(GAS_URL + '?t=' + Date.now(), function(err, d) {
-      if (err || !d) { showSyncStatus('⚠ Offline', '#b91c1c'); return; }
+      if (err || !d) { showSyncStatus('⚠ Offline — auto retry...', '#92400e'); scheduleRetry(); return; }
       if (d.reels !== undefined) {
         // Cloud empty hai to local data erase mat karo
         if ((!d.reels || d.reels.length === 0) && DB.reels.length > 0) {
