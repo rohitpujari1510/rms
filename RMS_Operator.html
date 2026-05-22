@@ -1568,7 +1568,6 @@ function renderInv() {
       ? '<span class="badge b-blue">Active</span>'
       : '<span class="badge b-gray">Fresh</span>';
     var _rowBg = _rs==='fully_consumed' ? 'background:#f0fff4;' : '';
-    var ordNo = c._groupNo || (DB.cuts.findIndex(function(x){ return x.id===c.id; })+1);
     tb.innerHTML +=
       '<tr style="'+_rowBg+'"><td class="mn">'+(i+1)+'</td>'+
       '<td style="font-weight:bold;color:#1a4f8a;white-space:nowrap;">'+H(r.rno)+'</td>'+
